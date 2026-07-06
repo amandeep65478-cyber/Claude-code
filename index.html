@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Holographic Gesture Drawing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: #0ff;
+            user-select: none;
+        }
+
+        #app {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            opacity: 0.25;
+            z-index: 1;
+        }
+
+        #drawCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            transform: scaleX(-1);
+        }
+
+        #uiCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            transform: scaleX(-1);
+            pointer-events: none;
+        }
+
+        .hud {
+            position: absolute;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .hud-top {
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+        }
+
+        .hud-top h1 {
+            font-size: 1.4rem;
+            font-weight: 300;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            color: #0ff;
+            text-shadow: 0 0 20px #0ff, 0 0 40px #0ff;
+            animation: flicker 3s infinite alternate;
+        }
+
+        .hud-bottom {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+        }
+
+        .mode-display {
+            font-size: 1.1rem;
+            letter-spacing: 4px;
+            padding: 8px 24px;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.6);
+            text-shadow: 0 0 10px currentColor;
+        }
+
+        .hud-left {
+            top: 50%;
+            left: 20px;
+            transform: translateY(-50%);
+        }
+
+        .gesture-list {
+            list-style: none;
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            opacity: 0.7;
+        }
+
+        .gesture-list li {
+            margin: 8px 0;
+            padding: 4px 10px;
+            border-left: 2px solid rgba(0, 255, 255, 0.3);
+            transition: all 0.3s;
+        }
+
+        .gesture-list li.active {
+            border-left-color: #0ff;
+            color: #fff;
+            opacity: 1;
+            text-shadow: 0 0 10px #0ff;
+        }
+
+        .hud-right {
+            top: 80px;
+            right: 20px;
+        }
+
+        .color-palette {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: auto;
+        }
+
+        .color-swatch {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .color-swatch:hover, .color-swatch.active {
+            border-color: #fff;
+            transform: scale(1.3);
+            box-shadow: 0 0 20px currentColor;
+        }
+
+        .toolbar {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 12px;
+            pointer-events: auto;
+        }
+
+        .tool-btn {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            color: #0ff;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            transition: all 0.3s;
+        }
+
+        .tool-btn:hover {
+            background: rgba(0, 255, 255, 0.15);
+            border-color: #0ff;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+        }
+
+        .tool-btn.active {
+            background: rgba(0, 255, 255, 0.2);
+            border-color: #0ff;
+            color: #fff;
+        }
+
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            background: radial-gradient(ellipse at center, #001a1a 0%, #000 70%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.8s;
+        }
+
+        #startScreen h1 {
+            font-size: 2.5rem;
+            font-weight: 200;
+            letter-spacing: 12px;
+            color: #0ff;
+            text-shadow: 0 0 30px #0ff, 0 0 60px #0ff;
+            margin-bottom: 10px;
+        }
+
+        #startScreen p {
+            font-size: 0.9rem;
+            letter-spacing: 3px;
+            color: rgba(0, 255, 255, 0.6);
+            margin-bottom: 40px;
+        }
+
+        #startBtn {
+            background: transparent;
+            border: 1px solid #0ff;
+            color: #0ff;
+            padding: 14px 48px;
+            font-size: 1rem;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.4s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #startBtn:hover {
+            background: rgba(0, 255, 255, 0.1);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.4), inset 0 0 30px rgba(0, 255, 255, 0.1);
+            transform: scale(1.05);
+        }
+
+        #statusMsg {
+            margin-top: 20px;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            color: rgba(0, 255, 255, 0.5);
+            min-height: 20px;
+        }
+
+        .size-indicator {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            z-index: 10;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            opacity: 0.6;
+        }
+
+        @keyframes flicker {
+            0%, 95% { opacity: 1; }
+            96% { opacity: 0.8; }
+            97% { opacity: 1; }
+            98% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        @keyframes scanline {
+            0% { top: -5%; }
+            100% { top: 105%; }
+        }
+
+        .scanline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.08), transparent);
+            z-index: 4;
+            animation: scanline 4s linear infinite;
+            pointer-events: none;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.04;
+            background-image:
+                linear-gradient(rgba(0, 255, 255, 1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 255, 1) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+        }
+
+        .vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.7) 100%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="startScreen">
+            <h1>HOLO DRAW</h1>
+            <p>hand gesture drawing system</p>
+            <button id="startBtn">Initialize</button>
+            <div id="statusMsg"></div>
+        </div>
+
+        <video id="video" autoplay playsinline></video>
+        <canvas id="drawCanvas"></canvas>
+        <canvas id="uiCanvas"></canvas>
+
+        <div class="scanline"></div>
+        <div class="grid-overlay"></div>
+        <div class="vignette"></div>
+
+        <div class="hud hud-top">
+            <h1>HOLO DRAW</h1>
+        </div>
+
+        <div class="hud hud-bottom">
+            <div class="mode-display" id="modeDisplay">STANDBY</div>
+        </div>
+
+        <div class="hud hud-left">
+            <ul class="gesture-list" id="gestureList">
+                <li data-gesture="point">&#9654; Point &mdash; Draw</li>
+                <li data-gesture="peace">&#9654; Peace &mdash; Erase</li>
+                <li data-gesture="fist">&#9654; Fist &mdash; Move</li>
+                <li data-gesture="open">&#9654; Open &mdash; Pause</li>
+                <li data-gesture="pinch">&#9654; Pinch &mdash; Size</li>
+                <li data-gesture="thumbsup">&#9654; Thumbs Up &mdash; Color</li>
+            </ul>
+        </div>
+
+        <div class="hud hud-right">
+            <div class="color-palette" id="colorPalette"></div>
+        </div>
+
+        <div class="size-indicator" id="sizeIndicator">SIZE: 4</div>
+
+        <div class="toolbar">
+            <button class="tool-btn" id="clearBtn">Clear</button>
+            <button class="tool-btn" id="undoBtn">Undo</button>
+            <button class="tool-btn" id="saveBtn">Save</button>
+            <button class="tool-btn" id="glowToggle">Glow: On</button>
+            <button class="tool-btn" id="shapeBtn">Free</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { HandLandmarker, FilesetResolver, DrawingUtils } from
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
+
+        const COLORS = [
+            { name: "Cyan",    hex: "#00ffff", rgb: [0, 255, 255] },
+            { name: "Magenta", hex: "#ff00ff", rgb: [255, 0, 255] },
+            { name: "Lime",    hex: "#00ff88", rgb: [0, 255, 136] },
+            { name: "Gold",    hex: "#ffcc00", rgb: [255, 204, 0] },
+            { name: "Red",     hex: "#ff3366", rgb: [255, 51, 102] },
+            { name: "Blue",    hex: "#3366ff", rgb: [51, 102, 255] },
+            { name: "White",   hex: "#ffffff", rgb: [255, 255, 255] },
+        ];
+
+        const SHAPE_MODES = ["Free", "Line", "Rect", "Circle", "Triangle"];
+
+        const video = document.getElementById("video");
+        const drawCanvas = document.getElementById("drawCanvas");
+        const uiCanvas = document.getElementById("uiCanvas");
+        const drawCtx = drawCanvas.getContext("2d");
+        const uiCtx = uiCanvas.getContext("2d");
+        const modeDisplay = document.getElementById("modeDisplay");
+        const gestureListEl = document.getElementById("gestureList");
+        const sizeIndicator = document.getElementById("sizeIndicator");
+        const startScreen = document.getElementById("startScreen");
+        const startBtn = document.getElementById("startBtn");
+        const statusMsg = document.getElementById("statusMsg");
+        const clearBtn = document.getElementById("clearBtn");
+        const undoBtn = document.getElementById("undoBtn");
+        const saveBtn = document.getElementById("saveBtn");
+        const glowToggle = document.getElementById("glowToggle");
+        const shapeBtn = document.getElementById("shapeBtn");
+        const colorPaletteEl = document.getElementById("colorPalette");
+
+        let handLandmarker = null;
+        let animationId = null;
+        let lastVideoTime = -1;
+
+        let state = {
+            drawing: false,
+            currentGesture: "none",
+            prevGesture: "none",
+            color: COLORS[0],
+            colorIndex: 0,
+            brushSize: 4,
+            glow: true,
+            shapeModeIndex: 0,
+            shapeMode: "Free",
+            lastPoint: null,
+            shapeStart: null,
+            strokes: [],
+            currentStroke: [],
+            history: [],
+            smoothedPoint: null,
+            pinchStartDist: null,
+            pinchStartSize: null,
+            fingerTrail: [],
+            colorCooldown: 0,
+        };
+
+        function buildColorPalette() {
+            COLORS.forEach((c, i) => {
+                const el = document.createElement("div");
+                el.className = "color-swatch" + (i === 0 ? " active" : "");
+                el.style.background = c.hex;
+                el.style.color = c.hex;
+                el.dataset.index = i;
+                el.addEventListener("click", () => {
+                    state.colorIndex = i;
+                    state.color = COLORS[i];
+                    document.querySelectorAll(".color-swatch").forEach(s => s.classList.remove("active"));
+                    el.classList.add("active");
+                });
+                colorPaletteEl.appendChild(el);
+            });
+        }
+
+        function resize() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            drawCanvas.width = w;
+            drawCanvas.height = h;
+            uiCanvas.width = w;
+            uiCanvas.height = h;
+            redrawStrokes();
+        }
+
+        function redrawStrokes() {
+            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+            for (const stroke of state.strokes) {
+                renderStroke(stroke);
+            }
+        }
+
+        function renderStroke(stroke) {
+            if (stroke.type === "free" && stroke.points.length > 1) {
+                drawCtx.save();
+                drawCtx.lineCap = "round";
+                drawCtx.lineJoin = "round";
+                drawCtx.lineWidth = stroke.size;
+                drawCtx.strokeStyle = stroke.color;
+                if (state.glow) {
+                    drawCtx.shadowColor = stroke.color;
+                    drawCtx.shadowBlur = stroke.size * 3;
+                }
+                drawCtx.beginPath();
+                drawCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                for (let i = 1; i < stroke.points.length; i++) {
+                    const p0 = stroke.points[i - 1];
+                    const p1 = stroke.points[i];
+                    const mx = (p0.x + p1.x) / 2;
+                    const my = (p0.y + p1.y) / 2;
+                    drawCtx.quadraticCurveTo(p0.x, p0.y, mx, my);
+                }
+                drawCtx.stroke();
+                drawCtx.restore();
+            } else if (stroke.type === "line" && stroke.start && stroke.end) {
+                drawCtx.save();
+                drawCtx.lineCap = "round";
+                drawCtx.lineWidth = stroke.size;
+                drawCtx.strokeStyle = stroke.color;
+                if (state.glow) {
+                    drawCtx.shadowColor = stroke.color;
+                    drawCtx.shadowBlur = stroke.size * 3;
+                }
+                drawCtx.beginPath();
+                drawCtx.moveTo(stroke.start.x, stroke.start.y);
+                drawCtx.lineTo(stroke.end.x, stroke.end.y);
+                drawCtx.stroke();
+                drawCtx.restore();
+            } else if (stroke.type === "rect" && stroke.start && stroke.end) {
+                drawCtx.save();
+                drawCtx.lineWidth = stroke.size;
+                drawCtx.strokeStyle = stroke.color;
+                if (state.glow) {
+                    drawCtx.shadowColor = stroke.color;
+                    drawCtx.shadowBlur = stroke.size * 3;
+                }
+                drawCtx.strokeRect(
+                    stroke.start.x, stroke.start.y,
+                    stroke.end.x - stroke.start.x,
+                    stroke.end.y - stroke.start.y
+                );
+                drawCtx.restore();
+            } else if (stroke.type === "circle" && stroke.center && stroke.radius) {
+                drawCtx.save();
+                drawCtx.lineWidth = stroke.size;
+                drawCtx.strokeStyle = stroke.color;
+                if (state.glow) {
+                    drawCtx.shadowColor = stroke.color;
+                    drawCtx.shadowBlur = stroke.size * 3;
+                }
+                drawCtx.beginPath();
+                drawCtx.arc(stroke.center.x, stroke.center.y, stroke.radius, 0, Math.PI * 2);
+                drawCtx.stroke();
+                drawCtx.restore();
+            } else if (stroke.type === "triangle" && stroke.points && stroke.points.length === 3) {
+                drawCtx.save();
+                drawCtx.lineWidth = stroke.size;
+                drawCtx.strokeStyle = stroke.color;
+                if (state.glow) {
+                    drawCtx.shadowColor = stroke.color;
+                    drawCtx.shadowBlur = stroke.size * 3;
+                }
+                drawCtx.beginPath();
+                drawCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                drawCtx.lineTo(stroke.points[1].x, stroke.points[1].y);
+                drawCtx.lineTo(stroke.points[2].x, stroke.points[2].y);
+                drawCtx.closePath();
+                drawCtx.stroke();
+                drawCtx.restore();
+            }
+        }
+
+        function smoothPoint(raw, prev, factor = 0.35) {
+            if (!prev) return raw;
+            return {
+                x: prev.x + (raw.x - prev.x) * factor,
+                y: prev.y + (raw.y - prev.y) * factor,
+            };
+        }
+
+        function dist(a, b) {
+            return Math.hypot(a.x - b.x, a.y - b.y);
+        }
+
+        function landmarkToCanvas(lm) {
+            return {
+                x: lm.x * drawCanvas.width,
+                y: lm.y * drawCanvas.height,
+            };
+        }
+
+        function detectGesture(landmarks) {
+            const tips = [8, 12, 16, 20];
+            const pips = [6, 10, 14, 18];
+            const fingerUp = tips.map((t, i) => landmarks[t].y < landmarks[pips[i]].y);
+            const thumbUp = landmarks[4].x < landmarks[3].x;
+            const thumbTipToIndex = dist(landmarkToCanvas(landmarks[4]), landmarkToCanvas(landmarks[8]));
+            const pinchThreshold = 40;
+
+            const [indexUp, middleUp, ringUp, pinkyUp] = fingerUp;
+
+            if (thumbTipToIndex < pinchThreshold && !middleUp && !ringUp && !pinkyUp) {
+                return "pinch";
+            }
+            if (thumbUp && !indexUp && !middleUp && !ringUp && !pinkyUp) {
+                return "thumbsup";
+            }
+            if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+                return "point";
+            }
+            if (indexUp && middleUp && !ringUp && !pinkyUp) {
+                return "peace";
+            }
+            if (!indexUp && !middleUp && !ringUp && !pinkyUp && !thumbUp) {
+                return "fist";
+            }
+            if (indexUp && middleUp && ringUp && pinkyUp) {
+                return "open";
+            }
+            return "none";
+        }
+
+        function drawHolographicCursor(ctx, point, gesture) {
+            ctx.save();
+            const t = performance.now() / 1000;
+            const pulse = 0.5 + 0.5 * Math.sin(t * 4);
+            const r = state.brushSize + 8 + pulse * 6;
+
+            ctx.strokeStyle = state.color.hex;
+            ctx.lineWidth = 1.5;
+            ctx.shadowColor = state.color.hex;
+            ctx.shadowBlur = 15;
+
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, r, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, r * 0.5, 0, Math.PI * 2);
+            ctx.stroke();
+
+            const crossSize = r + 6;
+            ctx.beginPath();
+            ctx.moveTo(point.x - crossSize, point.y);
+            ctx.lineTo(point.x - crossSize + 8, point.y);
+            ctx.moveTo(point.x + crossSize - 8, point.y);
+            ctx.lineTo(point.x + crossSize, point.y);
+            ctx.moveTo(point.x, point.y - crossSize);
+            ctx.lineTo(point.x, point.y - crossSize + 8);
+            ctx.moveTo(point.x, point.y + crossSize - 8);
+            ctx.lineTo(point.x, point.y + crossSize);
+            ctx.stroke();
+
+            if (gesture === "point") {
+                ctx.fillStyle = state.color.hex;
+                ctx.globalAlpha = 0.6 + pulse * 0.4;
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, state.brushSize / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.globalAlpha = 0.4;
+            ctx.font = "10px monospace";
+            ctx.fillStyle = state.color.hex;
+            ctx.textAlign = "left";
+            ctx.fillText(
+                `${Math.round(point.x)}, ${Math.round(point.y)}`,
+                point.x + r + 8,
+                point.y - 4
+            );
+            ctx.fillText(gesture.toUpperCase(), point.x + r + 8, point.y + 10);
+
+            ctx.restore();
+        }
+
+        function drawFingerTrail(ctx) {
+            if (state.fingerTrail.length < 2) return;
+            ctx.save();
+            for (let i = 1; i < state.fingerTrail.length; i++) {
+                const alpha = i / state.fingerTrail.length;
+                ctx.globalAlpha = alpha * 0.3;
+                ctx.strokeStyle = state.color.hex;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(state.fingerTrail[i - 1].x, state.fingerTrail[i - 1].y);
+                ctx.lineTo(state.fingerTrail[i].x, state.fingerTrail[i].y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawHandSkeleton(ctx, landmarks) {
+            const connections = [
+                [0,1],[1,2],[2,3],[3,4],
+                [0,5],[5,6],[6,7],[7,8],
+                [0,9],[9,10],[10,11],[11,12],
+                [0,13],[13,14],[14,15],[15,16],
+                [0,17],[17,18],[18,19],[19,20],
+                [5,9],[9,13],[13,17],
+            ];
+
+            ctx.save();
+            ctx.strokeStyle = "rgba(0, 255, 255, 0.25)";
+            ctx.lineWidth = 1;
+            ctx.shadowColor = "#0ff";
+            ctx.shadowBlur = 5;
+
+            for (const [a, b] of connections) {
+                const pa = landmarkToCanvas(landmarks[a]);
+                const pb = landmarkToCanvas(landmarks[b]);
+                ctx.beginPath();
+                ctx.moveTo(pa.x, pa.y);
+                ctx.lineTo(pb.x, pb.y);
+                ctx.stroke();
+            }
+
+            for (let i = 0; i < landmarks.length; i++) {
+                const p = landmarkToCanvas(landmarks[i]);
+                ctx.fillStyle = [4, 8, 12, 16, 20].includes(i)
+                    ? "rgba(0, 255, 255, 0.8)"
+                    : "rgba(0, 255, 255, 0.3)";
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, [4, 8, 12, 16, 20].includes(i) ? 4 : 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function drawShapePreview(ctx, start, current, mode) {
+            ctx.save();
+            ctx.setLineDash([6, 4]);
+            ctx.strokeStyle = state.color.hex;
+            ctx.lineWidth = state.brushSize;
+            ctx.shadowColor = state.color.hex;
+            ctx.shadowBlur = state.brushSize * 2;
+            ctx.globalAlpha = 0.6;
+
+            if (mode === "Line") {
+                ctx.beginPath();
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(current.x, current.y);
+                ctx.stroke();
+            } else if (mode === "Rect") {
+                ctx.strokeRect(start.x, start.y, current.x - start.x, current.y - start.y);
+            } else if (mode === "Circle") {
+                const r = dist(start, current);
+                ctx.beginPath();
+                ctx.arc(start.x, start.y, r, 0, Math.PI * 2);
+                ctx.stroke();
+            } else if (mode === "Triangle") {
+                const dx = current.x - start.x;
+                const dy = current.y - start.y;
+                const r = Math.hypot(dx, dy);
+                const pts = [];
+                for (let i = 0; i < 3; i++) {
+                    const angle = (i * 2 * Math.PI) / 3 - Math.PI / 2;
+                    pts.push({
+                        x: start.x + r * Math.cos(angle),
+                        y: start.y + r * Math.sin(angle),
+                    });
+                }
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                ctx.lineTo(pts[1].x, pts[1].y);
+                ctx.lineTo(pts[2].x, pts[2].y);
+                ctx.closePath();
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function updateGestureUI(gesture) {
+            gestureListEl.querySelectorAll("li").forEach(li => {
+                li.classList.toggle("active", li.dataset.gesture === gesture);
+            });
+        }
+
+        function handleGesture(gesture, landmarks) {
+            const indexTip = landmarkToCanvas(landmarks[8]);
+            const rawPoint = indexTip;
+            const point = smoothPoint(rawPoint, state.smoothedPoint, 0.3);
+            state.smoothedPoint = point;
+
+            state.fingerTrail.push({ ...point });
+            if (state.fingerTrail.length > 20) state.fingerTrail.shift();
+
+            if (state.colorCooldown > 0) state.colorCooldown--;
+
+            if (gesture === "point") {
+                if (state.shapeMode === "Free") {
+                    if (!state.drawing || state.prevGesture !== "point") {
+                        state.drawing = true;
+                        state.currentStroke = [{ ...point }];
+                        state.lastPoint = point;
+                    } else {
+                        state.currentStroke.push({ ...point });
+                        drawCtx.save();
+                        drawCtx.lineCap = "round";
+                        drawCtx.lineJoin = "round";
+                        drawCtx.lineWidth = state.brushSize;
+                        drawCtx.strokeStyle = state.color.hex;
+                        if (state.glow) {
+                            drawCtx.shadowColor = state.color.hex;
+                            drawCtx.shadowBlur = state.brushSize * 3;
+                        }
+                        drawCtx.beginPath();
+                        drawCtx.moveTo(state.lastPoint.x, state.lastPoint.y);
+                        const mx = (state.lastPoint.x + point.x) / 2;
+                        const my = (state.lastPoint.y + point.y) / 2;
+                        drawCtx.quadraticCurveTo(state.lastPoint.x, state.lastPoint.y, mx, my);
+                        drawCtx.stroke();
+                        drawCtx.restore();
+                        state.lastPoint = point;
+                    }
+                    modeDisplay.textContent = "DRAWING";
+                    modeDisplay.style.color = state.color.hex;
+                } else {
+                    if (!state.shapeStart || state.prevGesture !== "point") {
+                        state.shapeStart = { ...point };
+                        state.drawing = true;
+                    }
+                    modeDisplay.textContent = `SHAPE: ${state.shapeMode.toUpperCase()}`;
+                    modeDisplay.style.color = state.color.hex;
+                }
+            } else {
+                if (state.prevGesture === "point" && state.drawing) {
+                    if (state.shapeMode === "Free" && state.currentStroke.length > 1) {
+                        state.strokes.push({
+                            type: "free",
+                            points: [...state.currentStroke],
+                            color: state.color.hex,
+                            size: state.brushSize,
+                        });
+                        state.history.push(state.strokes.length - 1);
+                    } else if (state.shapeMode !== "Free" && state.shapeStart) {
+                        const endPt = { ...point };
+                        if (state.shapeMode === "Line") {
+                            state.strokes.push({
+                                type: "line",
+                                start: { ...state.shapeStart },
+                                end: endPt,
+                                color: state.color.hex,
+                                size: state.brushSize,
+                            });
+                        } else if (state.shapeMode === "Rect") {
+                            state.strokes.push({
+                                type: "rect",
+                                start: { ...state.shapeStart },
+                                end: endPt,
+                                color: state.color.hex,
+                                size: state.brushSize,
+                            });
+                        } else if (state.shapeMode === "Circle") {
+                            state.strokes.push({
+                                type: "circle",
+                                center: { ...state.shapeStart },
+                                radius: dist(state.shapeStart, endPt),
+                                color: state.color.hex,
+                                size: state.brushSize,
+                            });
+                        } else if (state.shapeMode === "Triangle") {
+                            const r = dist(state.shapeStart, endPt);
+                            const pts = [];
+                            for (let i = 0; i < 3; i++) {
+                                const angle = (i * 2 * Math.PI) / 3 - Math.PI / 2;
+                                pts.push({
+                                    x: state.shapeStart.x + r * Math.cos(angle),
+                                    y: state.shapeStart.y + r * Math.sin(angle),
+                                });
+                            }
+                            state.strokes.push({
+                                type: "triangle",
+                                points: pts,
+                                color: state.color.hex,
+                                size: state.brushSize,
+                            });
+                        }
+                        state.history.push(state.strokes.length - 1);
+                        redrawStrokes();
+                    }
+                    state.shapeStart = null;
+                    state.drawing = false;
+                    state.currentStroke = [];
+                }
+            }
+
+            if (gesture === "peace") {
+                const middleTip = landmarkToCanvas(landmarks[12]);
+                const erasePt = {
+                    x: (point.x + middleTip.x) / 2,
+                    y: (point.y + middleTip.y) / 2,
+                };
+                const eraseRadius = 30;
+                state.strokes = state.strokes.filter(stroke => {
+                    if (stroke.type === "free") {
+                        return !stroke.points.some(p => dist(p, erasePt) < eraseRadius);
+                    }
+                    return true;
+                });
+                redrawStrokes();
+                modeDisplay.textContent = "ERASING";
+                modeDisplay.style.color = "#ff3366";
+            }
+
+            if (gesture === "fist") {
+                modeDisplay.textContent = "MOVE";
+                modeDisplay.style.color = "#ffcc00";
+            }
+
+            if (gesture === "open") {
+                modeDisplay.textContent = "PAUSED";
+                modeDisplay.style.color = "#0ff";
+                state.drawing = false;
+            }
+
+            if (gesture === "pinch") {
+                const thumbTip = landmarkToCanvas(landmarks[4]);
+                const indexTipPt = landmarkToCanvas(landmarks[8]);
+                const pinchDist = dist(thumbTip, indexTipPt);
+                if (state.pinchStartDist === null) {
+                    state.pinchStartDist = pinchDist;
+                    state.pinchStartSize = state.brushSize;
+                } else {
+                    const delta = pinchDist - state.pinchStartDist;
+                    state.brushSize = Math.max(1, Math.min(40,
+                        state.pinchStartSize + delta * 0.15));
+                    sizeIndicator.textContent = `SIZE: ${Math.round(state.brushSize)}`;
+                }
+                modeDisplay.textContent = `SIZE: ${Math.round(state.brushSize)}`;
+                modeDisplay.style.color = "#00ff88";
+            } else {
+                state.pinchStartDist = null;
+            }
+
+            if (gesture === "thumbsup" && state.colorCooldown === 0) {
+                state.colorIndex = (state.colorIndex + 1) % COLORS.length;
+                state.color = COLORS[state.colorIndex];
+                document.querySelectorAll(".color-swatch").forEach((s, i) => {
+                    s.classList.toggle("active", i === state.colorIndex);
+                });
+                state.colorCooldown = 20;
+                modeDisplay.textContent = `COLOR: ${state.color.name.toUpperCase()}`;
+                modeDisplay.style.color = state.color.hex;
+            }
+
+            return point;
+        }
+
+        async function processFrame() {
+            if (!handLandmarker || video.readyState < 2) {
+                animationId = requestAnimationFrame(processFrame);
+                return;
+            }
+
+            const now = video.currentTime;
+            if (now === lastVideoTime) {
+                animationId = requestAnimationFrame(processFrame);
+                return;
+            }
+            lastVideoTime = now;
+
+            const results = handLandmarker.detectForVideo(video, performance.now());
+
+            uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+
+            if (results.landmarks && results.landmarks.length > 0) {
+                const landmarks = results.landmarks[0];
+                const gesture = detectGesture(landmarks);
+
+                state.prevGesture = state.currentGesture;
+                state.currentGesture = gesture;
+
+                const cursorPoint = handleGesture(gesture, landmarks);
+
+                drawHandSkeleton(uiCtx, landmarks);
+                drawFingerTrail(uiCtx);
+                drawHolographicCursor(uiCtx, cursorPoint, gesture);
+
+                if (state.shapeMode !== "Free" && state.shapeStart && gesture === "point") {
+                    drawShapePreview(uiCtx, state.shapeStart, cursorPoint, state.shapeMode);
+                }
+
+                updateGestureUI(gesture);
+            } else {
+                state.currentGesture = "none";
+                state.drawing = false;
+                state.fingerTrail = [];
+                updateGestureUI("none");
+                modeDisplay.textContent = "NO HAND DETECTED";
+                modeDisplay.style.color = "rgba(0, 255, 255, 0.4)";
+            }
+
+            animationId = requestAnimationFrame(processFrame);
+        }
+
+        async function init() {
+            statusMsg.textContent = "Requesting camera access...";
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+                });
+                video.srcObject = stream;
+                await video.play();
+            } catch (err) {
+                statusMsg.textContent = "Camera access denied. Please allow camera and reload.";
+                return;
+            }
+
+            statusMsg.textContent = "Loading hand tracking model...";
+
+            try {
+                const vision = await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
+                );
+                handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                    baseOptions: {
+                        modelAssetPath:
+                            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+                        delegate: "GPU",
+                    },
+                    runningMode: "VIDEO",
+                    numHands: 1,
+                    minHandDetectionConfidence: 0.6,
+                    minTrackingConfidence: 0.6,
+                });
+            } catch (err) {
+                statusMsg.textContent = "Failed to load hand tracking. Check connection.";
+                console.error(err);
+                return;
+            }
+
+            statusMsg.textContent = "System ready.";
+            resize();
+
+            setTimeout(() => {
+                startScreen.style.opacity = "0";
+                setTimeout(() => {
+                    startScreen.style.display = "none";
+                }, 800);
+                processFrame();
+            }, 500);
+        }
+
+        clearBtn.addEventListener("click", () => {
+            state.strokes = [];
+            state.history = [];
+            state.currentStroke = [];
+            redrawStrokes();
+        });
+
+        undoBtn.addEventListener("click", () => {
+            if (state.history.length > 0) {
+                state.history.pop();
+                state.strokes.pop();
+                redrawStrokes();
+            }
+        });
+
+        saveBtn.addEventListener("click", () => {
+            const tempCanvas = document.createElement("canvas");
+            tempCanvas.width = drawCanvas.width;
+            tempCanvas.height = drawCanvas.height;
+            const tempCtx = tempCanvas.getContext("2d");
+            tempCtx.fillStyle = "#000";
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.scale(-1, 1);
+            tempCtx.translate(-tempCanvas.width, 0);
+            tempCtx.drawImage(drawCanvas, 0, 0);
+            const link = document.createElement("a");
+            link.download = `holodraw-${Date.now()}.png`;
+            link.href = tempCanvas.toDataURL("image/png");
+            link.click();
+        });
+
+        glowToggle.addEventListener("click", () => {
+            state.glow = !state.glow;
+            glowToggle.textContent = `Glow: ${state.glow ? "On" : "Off"}`;
+            glowToggle.classList.toggle("active", state.glow);
+            redrawStrokes();
+        });
+
+        shapeBtn.addEventListener("click", () => {
+            state.shapeModeIndex = (state.shapeModeIndex + 1) % SHAPE_MODES.length;
+            state.shapeMode = SHAPE_MODES[state.shapeModeIndex];
+            shapeBtn.textContent = state.shapeMode;
+            shapeBtn.classList.toggle("active", state.shapeMode !== "Free");
+        });
+
+        startBtn.addEventListener("click", init);
+        window.addEventListener("resize", resize);
+
+        buildColorPalette();
+        resize();
+    </script>
+</body>
+</html>
